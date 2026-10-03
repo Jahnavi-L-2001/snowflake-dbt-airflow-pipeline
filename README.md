@@ -1,45 +1,69 @@
-Overview
-========
+# Snowflake + dbt + Airflow ELT Pipeline
 
-Welcome to Astronomer! This project was generated after you ran 'astro dev init' using the Astronomer CLI. This readme describes the contents of the project, as well as how to run Apache Airflow on your local machine.
+An end-to-end ELT pipeline: raw data is loaded into **Snowflake**, transformed with **dbt** (staging → intermediate → marts), validated with data tests, and orchestrated by **Apache Airflow** running in **Docker** (Astro CLI).
 
-Project Contents
-================
+This extends my earlier Snowflake + dbt project: [Jahnavi-L-2001/project](https://github.com/Jahnavi-L-2001/project).
 
-Your Astro project contains the following files and folders:
+## Pipeline flow
 
-- dags: This folder contains the Python files for your Airflow Dags. By default, this directory includes one example Dag:
-    - `example_astronauts`: This Dag shows a simple ETL pipeline example that queries the list of astronauts currently in space from the Open Notify API and prints a statement for each astronaut. The Dag uses the TaskFlow API to define tasks in Python, and dynamic task mapping to dynamically print a statement for each astronaut. For more on how this Dag works, see our [Getting started tutorial](https://www.astronomer.io/docs/learn/get-started-with-airflow).
-- Dockerfile: This file contains a versioned Astro Runtime Docker image that provides a differentiated Airflow experience. If you want to execute other commands or overrides at runtime, specify them here.
-- include: This folder contains any additional files that you want to include as part of your project. It is empty by default.
-- packages.txt: Install OS-level packages needed for your project by adding them to this file. It is empty by default.
-- requirements.txt: Install Python packages needed for your project by adding them to this file. It is empty by default.
-- plugins: Add custom or community plugins for your project to this file. It is empty by default.
-- airflow_settings.yaml: Use this local-only file to specify Airflow Connections, Variables, and Pools instead of entering them in the Airflow UI as you develop Dags in this project.
+`load_raw_data` → `dbt_deps` → `dbt_seed` → `dbt_run` → `dbt_test` → `dbt_snapshot`
 
-Deploy Your Project Locally
-===========================
+| Task | What it does |
+|---|---|
+| `load_raw_data` | Python connects to Snowflake, uploads CSVs to an internal stage, and loads the RAW tables with `COPY INTO` |
+| `dbt_deps` | Installs dbt packages (`dbt_utils`) |
+| `dbt_seed` | Loads reference data (`valid_categories.csv`) |
+| `dbt_run` | Builds 9 models: staging views, intermediate views, mart tables |
+| `dbt_test` | Runs 28 data tests (not null, unique, relationships, accepted values, custom tests) |
+| `dbt_snapshot` | Maintains an SCD Type 2 history of orders |
 
-Start Airflow on your local machine by running 'astro dev start'.
+The DAG runs daily with 2 retries per task and `max_active_runs=1` to prevent overlapping runs.
 
-This command will spin up five Docker containers on your machine, each for a different Airflow component:
+![Airflow graph view](docs/airflow_graph.png)
+![Airflow runs](docs/airflow_runs.png)
 
-- Postgres: Airflow's Metadata Database
-- Scheduler: The Airflow component responsible for monitoring and triggering tasks
-- Dag Processor: The Airflow component responsible for parsing Dags
-- API Server: The Airflow component responsible for serving the Airflow UI and API
-- Triggerer: The Airflow component responsible for triggering deferred tasks
+## What is in the dbt project
 
-When all five containers are ready the command will open the browser to the Airflow UI at http://localhost:8080/. You should also be able to access your Postgres Database at 'localhost:5432/postgres' with username 'postgres' and password 'postgres'.
+- **Staging:** `stg_employee`, `stg_family`, `stg_orders` (cleaning and renaming)
+- **Intermediate:** `int_employee`, `int_family`, `int_orders_incremental` (joins and an incremental model)
+- **Marts:** `mart_employee_directory`, `mart_sales_by_category`, `family_masked` (with a column-masking macro)
+- **Snapshot:** `orders_snapshot` (SCD Type 2)
+- **Tests:** 28 tests, including custom SQL tests for positive order amounts and masked phone numbers
 
-Note: If you already have either of the above ports allocated, you can either [stop your existing Docker containers or change the port](https://www.astronomer.io/docs/astro/cli/troubleshoot-locally#ports-are-not-available-for-my-local-airflow-webserver).
+## Tech stack
 
-Deploy Your Project to Astronomer
-=================================
+Snowflake, dbt Core, Apache Airflow, Docker, Astro CLI, Python, SQL, Git
 
-If you have an Astronomer account, pushing code to a Deployment on Astronomer is simple. For deploying instructions, refer to Astronomer documentation: https://www.astronomer.io/docs/astro/deploy-code/
+## Security
 
-Contact
-=======
+Snowflake no longer accepts passwords for programmatic access, so dbt and Airflow connect with **key-pair authentication**. The private key and `.env` are never committed (see `.gitignore`).
 
-The Astronomer CLI is maintained with love by the Astronomer team. To report a bug or suggest a change, reach out to our support.
+## How to run
+
+1. Install Docker Desktop and the Astro CLI.
+2. In Snowflake, run `dags/dbt_project/snowflake-setup/sql/warehouse_database_schema.sql`, then create the file formats and RAW tables:
+```sql
+   USE DATABASE ANALYTICS_DB;
+   USE SCHEMA RAW;
+   CREATE OR REPLACE FILE FORMAT csv_format TYPE = CSV SKIP_HEADER = 1 FIELD_OPTIONALLY_ENCLOSED_BY = '"';
+   CREATE OR REPLACE TABLE employee (empno INT, ename STRING, job STRING, mgr INT, hiredate DATE, sal FLOAT, comm FLOAT, deptno INT);
+   CREATE OR REPLACE TABLE family (parent_name STRING, gender STRING, dob DATE, city STRING, state STRING, house_number STRING, office_phone STRING, personal_phone STRING, kid_name STRING);
+   CREATE OR REPLACE TABLE orders (order_id INT, customer_name STRING, order_date DATE, category STRING, amount FLOAT);
+```
+3. Generate an RSA key pair, attach the public key to your Snowflake user (`ALTER USER ... SET RSA_PUBLIC_KEY=...`), and save the private key as `include/keys/rsa_key.p8`.
+4. Create a `.env` file in the project root:
+```
+   SNOWFLAKE_ACCOUNT=<orgname-accountname>
+   SNOWFLAKE_USER=<your_user>
+```
+5. Start Airflow and open http://localhost:8080:
+```
+   astro dev start
+```
+6. Trigger the DAG `snowflake_dbt_pipeline`.
+
+## Notes
+
+- The data in `include/data/` is **sample data** created for demonstration.
+- The earlier version of this project loaded data from AWS S3 using a storage integration and Snowpipe. Those scripts are kept in `dags/dbt_project/snowflake-setup/sql/`, but this version loads through an internal Snowflake stage so it runs without an AWS account.
+- `snowflake-setup/snowpark/connect.py` comes from the earlier version and uses password authentication, which Snowflake no longer supports.
