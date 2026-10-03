@@ -1,0 +1,52 @@
+version: 2
+
+models:
+  - name: mart_employee_directory
+    description: "Final mart combining employee and family details for reporting"
+    columns:
+      - name: employee_id
+        tests:
+          - not_null
+          - unique
+      - name: employee_name
+      - name: job_title
+      - name: manager_name
+      - name: department_id
+      - name: salary
+      - name: parent_name
+      - name: city
+      - name: state
+      - name: kid_name
+
+  - name: mart_sales_by_category
+    description: "Aggregated sales KPIs by product category"
+    columns:
+      - name: product_category
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('valid_categories')
+                field: category 
+      - name: total_orders
+        tests:
+          - not_null
+      - name: total_sales
+        tests:
+          - not_null
+      - name: avg_order_value
+        tests:
+          - not_null
+
+  - name: family_masked
+    description: "Secure view masking sensitive phone number columns based on role"
+    columns:
+      - name: parent_name
+        tests:
+          - not_null
+      - name: office_phone
+        tests:
+          - not_null
+      - name: personal_phone
+        tests:
+          - not_null

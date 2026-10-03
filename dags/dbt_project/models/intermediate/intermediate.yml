@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: int_employee
+    description: "Intermediate model enriching employees with manager names"
+    columns:
+      - name: employee_id
+        tests:
+          - not_null
+          - unique
+      - name: manager_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('int_employee')
+                field: employee_id
+
+  - name: int_family
+    description: "Intermediate model joining employees with family details"
+    columns:
+      - name: employee_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('int_employee')
+                field: employee_id

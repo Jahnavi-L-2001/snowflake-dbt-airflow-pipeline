@@ -1,0 +1,6 @@
+parent_name,gender,dob,city,state,house_number,office_phone,personal_phone,kid_name
+SMITH,M,1985-03-12,Chennai,Tamil Nadu,12A,044-2345-1001,98400-11001,Arun
+ALLEN,M,1983-07-21,Bengaluru,Karnataka,45,080-2345-1002,98400-11002,Meera
+WARD,F,1986-11-05,Hyderabad,Telangana,7B,040-2345-1003,98400-11003,Kavin
+JONES,M,1980-01-30,Pune,Maharashtra,101,020-2345-1004,98400-11004,Isha
+BLAKE,F,1984-09-18,Chennai,Tamil Nadu,9,044-2345-1005,98400-11005,Rohan

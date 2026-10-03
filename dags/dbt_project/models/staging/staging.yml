@@ -1,0 +1,61 @@
+version: 2
+
+models:
+  - name: stg_employee
+    description: "Cleaned employee data from raw.employee"
+    columns:
+      - name: employee_id
+        description: "Unique identifier for each employee"
+        tests:
+          - not_null
+          - unique
+      - name: employee_name
+        description: "Employee full name"
+        tests:
+          - not_null
+      - name: job_title
+        description: "Job title of the employee"
+      - name: manager_id
+        description: "Employee’s manager identifier"
+      - name: hire_date
+        description: "Date employee was hired"
+      - name: salary
+        description: "Base salary of the employee"
+      - name: commission
+        description: "Commission amount, defaults to 0"
+      - name: department_id
+        description: "Department identifier"
+
+  - name: stg_orders
+    description: "Cleaned orders data from raw.orders"
+    columns:
+      - name: order_id
+        description: "Unique identifier for each order"
+        tests:
+          - not_null
+          - unique
+      - name: customer_name
+        description: "Customer name trimmed of whitespace"
+        tests:
+          - not_null
+      - name: order_date
+        description: "Date of the order"
+        tests:
+          - not_null
+      - name: product_category
+        description: "Normalized product category"
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['ELECTRONICS','FURNITURE','CLOTHING','GROCERY','TOYS','BOOKS','SPORTS','ACCESSORIES','BEAUTY','HOME_APPLIANCES','HOME']
+      - name: order_amount
+        description: "Order amount in currency"
+        tests:
+          - not_null  
+  - name: stg_family
+    description: "Cleaned family/dependent data from raw.family"
+    columns:
+      - name: parent_name
+        description: "Name of the parent/employee this record belongs to"
+        tests:
+          - not_null

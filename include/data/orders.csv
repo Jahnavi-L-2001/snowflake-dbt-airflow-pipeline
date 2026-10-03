@@ -1,0 +1,9 @@
+order_id,customer_name,order_date,category,amount
+1,Asha,2026-09-01,Electronics,1200.50
+2,Ravi,2026-09-02,Clothing,450.00
+3,Meena,2026-09-03,Books,299.00
+4,Asha,2026-09-05,Clothing,780.25
+5,Karan,2026-09-07,Electronics,2300.00
+6,Ravi,2026-09-08,Books,150.00
+7,Meena,2026-09-10,Electronics,980.75
+8,Karan,2026-09-12,Clothing,320.00
