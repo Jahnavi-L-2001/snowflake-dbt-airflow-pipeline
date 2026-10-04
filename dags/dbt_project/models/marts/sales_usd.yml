@@ -1,0 +1,12 @@
+version: 2
+
+models:
+  - name: mart_sales_usd
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+          - unique
+      - name: amount_usd
+        data_tests:
+          - not_null

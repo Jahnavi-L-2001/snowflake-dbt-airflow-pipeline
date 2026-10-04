@@ -1,4 +1,7 @@
+import csv
+import json
 import os
+import urllib.request
 from datetime import datetime, timedelta
 
 try:
@@ -16,6 +19,22 @@ except ImportError:
 DBT_DIR = "/usr/local/airflow/dags/dbt_project"
 DATA_DIR = "/usr/local/airflow/include/data"
 KEY_FILE = "/usr/local/airflow/include/keys/rsa_key.p8"
+START_DATE = "2026-09-01"
+
+
+def fetch_exchange_rates():
+    url = f"https://api.frankfurter.dev/v1/{START_DATE}..?from=INR&to=USD"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        data = json.load(resp)
+
+    base = data["base"]
+    with open(f"{DATA_DIR}/exchange_rates.csv", "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["rate_date", "base_currency", "target_currency", "rate"])
+        for rate_date, rates in sorted(data["rates"].items()):
+            for target, rate in rates.items():
+                writer.writerow([rate_date, base, target, rate])
 
 
 def load_raw_data():
@@ -33,7 +52,7 @@ def load_raw_data():
     cur = conn.cursor()
     try:
         cur.execute("CREATE STAGE IF NOT EXISTS internal_stage")
-        for table in ["employee", "family", "orders"]:
+        for table in ["employee", "family", "orders", "exchange_rates"]:
             cur.execute(
                 f"PUT file://{DATA_DIR}/{table}.csv @internal_stage "
                 "AUTO_COMPRESS=FALSE OVERWRITE=TRUE"
@@ -64,6 +83,7 @@ with DAG(
     tags=["snowflake", "dbt"],
 ) as dag:
 
+    fetch_rates = PythonOperator(task_id="fetch_exchange_rates", python_callable=fetch_exchange_rates)
     load_raw = PythonOperator(task_id="load_raw_data", python_callable=load_raw_data)
     dbt_deps = BashOperator(task_id="dbt_deps", bash_command=dbt_cmd("deps"))
     dbt_seed = BashOperator(task_id="dbt_seed", bash_command=dbt_cmd("seed"))
@@ -71,4 +91,4 @@ with DAG(
     dbt_test = BashOperator(task_id="dbt_test", bash_command=dbt_cmd("test"))
     dbt_snapshot = BashOperator(task_id="dbt_snapshot", bash_command=dbt_cmd("snapshot"))
 
-    load_raw >> dbt_deps >> dbt_seed >> dbt_run >> dbt_test >> dbt_snapshot
+    fetch_rates >> load_raw >> dbt_deps >> dbt_seed >> dbt_run >> dbt_test >> dbt_snapshot

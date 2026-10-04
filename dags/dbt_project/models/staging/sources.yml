@@ -8,3 +8,4 @@ sources:
       - name: employee
       - name: family
       - name: orders
+      - name: exchange_rates
