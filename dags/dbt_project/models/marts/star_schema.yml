@@ -1,0 +1,38 @@
+version: 2
+models:
+  - name: dim_customer
+    description: "Customer dimension, SCD Type 2 built from a dbt snapshot"
+    columns:
+      - name: customer_key
+        tests: [unique, not_null]
+  - name: dim_category
+    description: "Product category dimension from the valid_categories seed"
+    columns:
+      - name: category_key
+        tests: [unique, not_null]
+  - name: dim_date
+    description: "Calendar dimension"
+    columns:
+      - name: date_key
+        tests: [unique, not_null]
+  - name: fct_orders
+    description: "Fact table, one row per order, amounts in INR and USD"
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: customer_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customer')
+                field: customer_key
+      - name: category_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_category')
+                field: category_key
+      - name: amount_usd
+        tests: [not_null]
