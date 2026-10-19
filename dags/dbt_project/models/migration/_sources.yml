@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: shop
+    database: ANALYTICS_DB
+    schema: RAW_SHOP
+    tables:
+      - name: customers
+      - name: products
+      - name: orders
+      - name: customer_summary_legacy
