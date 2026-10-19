@@ -91,4 +91,4 @@ with DAG(
     dbt_test = BashOperator(task_id="dbt_test", bash_command=dbt_cmd("test"))
     dbt_snapshot = BashOperator(task_id="dbt_snapshot", bash_command=dbt_cmd("snapshot"))
 
-    fetch_rates >> load_raw >> dbt_deps >> dbt_seed >> dbt_run >> dbt_test >> dbt_snapshot
+    fetch_rates >> load_raw >> dbt_deps >> dbt_seed >> dbt_snapshot >> dbt_run >> dbt_test

@@ -1,22 +1,22 @@
 # Snowflake + dbt + Airflow ELT Pipeline
 
-An end-to-end ELT pipeline: exchange rates are fetched from a public API and sample sales data is loaded into **Snowflake**, transformed with **dbt** (staging → intermediate → marts), validated with data tests, and orchestrated by **Apache Airflow** running in **Docker** (Astro CLI).
+An end-to-end ELT pipeline: exchange rates are fetched from a public API and sample sales data is loaded into **Snowflake**, transformed with **dbt** (staging → intermediate → marts → star schema), validated with data tests, and orchestrated by **Apache Airflow** running in **Docker** (Astro CLI).
 
 This extends my earlier Snowflake + dbt project: [Jahnavi-L-2001/project](https://github.com/Jahnavi-L-2001/project).
 
 ## Pipeline flow
 
-`fetch_exchange_rates` → `load_raw_data` → `dbt_deps` → `dbt_seed` → `dbt_run` → `dbt_test` → `dbt_snapshot`
+`fetch_exchange_rates` → `load_raw_data` → `dbt_deps` → `dbt_seed` → `dbt_snapshot` → `dbt_run` → `dbt_test`
 
 | Task | What it does |
 |---|---|
 | `fetch_exchange_rates` | Python calls the Frankfurter API (INR→USD rates), parses the JSON response, and writes a CSV |
 | `load_raw_data` | Connects to Snowflake, uploads the CSVs to an internal stage, and loads the RAW tables with `COPY INTO` |
 | `dbt_deps` | Installs dbt packages (`dbt_utils`) |
-| `dbt_seed` | Loads reference data (`valid_categories.csv`) |
-| `dbt_run` | Builds 11 models: staging views, intermediate views, mart tables |
-| `dbt_test` | Runs 34 data tests (not null, unique, relationships, accepted values, custom tests) |
-| `dbt_snapshot` | Maintains an SCD Type 2 history of orders |
+| `dbt_seed` | Loads reference data (`valid_categories.csv`, `customers.csv`) |
+| `dbt_snapshot` | Maintains SCD Type 2 history (`orders_snapshot`, `customers_snapshot`) before the models are built |
+| `dbt_run` | Builds 15 models: staging views, intermediate views, mart tables, and the star schema |
+| `dbt_test` | Runs 47 data tests (not null, unique, relationships, accepted values, custom tests) |
 
 The DAG runs daily with 2 retries per task and `max_active_runs=1` to prevent overlapping runs.
 
@@ -34,8 +34,21 @@ The DAG runs daily with 2 retries per task and `max_active_runs=1` to prevent ov
 - **Intermediate:** `int_employee`, `int_family`, `int_orders_incremental` (joins and an incremental model)
 - **Marts:** `mart_employee_directory`, `mart_sales_by_category`, `family_masked` (with a column-masking macro), and `mart_sales_usd`
 - **`mart_sales_usd`:** converts order amounts to USD using the latest exchange rate on or before each order date, because the ECB publishes rates on working days only
-- **Snapshot:** `orders_snapshot` (SCD Type 2)
-- **Tests:** 34 tests, including custom SQL tests for positive order amounts and masked phone numbers
+- **Star schema:** `fct_orders` (one row per order, incremental) with `dim_customer` (SCD Type 2), `dim_category`, and `dim_date`
+- **Snapshots:** `orders_snapshot` and `customers_snapshot` (SCD Type 2). `customers_snapshot` uses the check strategy on `city` and `segment`.
+- **Tests:** 47 tests, including custom SQL tests for positive order amounts and masked phone numbers, and relationships tests from the fact table to each dimension
+
+## Star schema
+
+**Grain:** one row per order in `fct_orders`, with amounts in INR and USD.
+
+- `dim_customer` is SCD Type 2, built from a dbt snapshot. A new row is added only when a customer's city or segment changes, so old orders keep the city that was true when they were placed.
+- The orders data only has a customer name, so I added a `customers` seed with city and segment for the dimension.
+- The first version of each customer is backdated in `dim_customer`, otherwise orders placed before the snapshot first ran would not match any customer row.
+- Weekend orders use the latest exchange rate on or before the order date, because the rates API has no weekend rows.
+- `fct_orders` is incremental and merges on `order_id`.
+
+![SCD2 demo](docs/scd2_demo.png)
 
 ## Tech stack
 
@@ -51,6 +64,7 @@ Snowflake no longer accepts passwords for programmatic access, so dbt and Airflo
 - **Overlapping runs:** a manual and a scheduled run executed `dbt deps` at the same time and corrupted the package folder. Fixed by setting `max_active_runs=1`.
 - **Data quality catch:** a dbt `relationships` test flagged an employee whose manager did not exist in the data, and I fixed it at the source.
 - **Missing dbt source:** a new staging model failed until its table was declared in `sources.yml`.
+- **SCD2 date join:** the first snapshot run stamped today's date as `valid_from`, so older orders found no customer row. Fixed by backdating each customer's first version in `dim_customer`.
 
 ## How to run
 
